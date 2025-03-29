@@ -11,6 +11,15 @@ from PyQt6.QtGui import QIcon, QFont
 
 SCALE_FACTORS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600]
 
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
 
 class DraggableLabel(QLabel):
     def __init__(self, scroll_area, sync_scroll_area):
@@ -222,8 +231,9 @@ class ImageConverter(QWidget):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    app_icon = QIcon("media/favicon.ico")  # Assumes the file is in the same directory as your script
-    app.setWindowIcon(app_icon)
+    icon_path = resource_path('media/favicon.ico')
+    # app_icon = QIcon("media\\favicon.ico")  # Assumes the file is in the same directory as your script
+    app.setWindowIcon(QIcon(icon_path))
     converter = ImageConverter()
     converter.show()
     sys.exit(app.exec())
