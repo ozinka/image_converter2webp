@@ -185,10 +185,10 @@ class ImageConverter(QWidget):
                                           # Qt.TransformationMode.SmoothTransformation)
             self.original_label.setPixmap(scaled_pixmap)
             self.original_label.adjustSize()
-            self.converted_label.setPixmap(scaled_pixmap)
-            self.converted_label.adjustSize()
+            # self.converted_label.setPixmap(scaled_pixmap)
+            # self.converted_label.adjustSize()
             self.zoom_label.setText(f"{scale_factor}%")
-            # self.convert_image()
+            self.convert_image()
 
     def update_preview(self):
         self.compression_label.setText(f"{self.quality_slider.value()}%")
