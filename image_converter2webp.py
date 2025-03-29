@@ -7,7 +7,7 @@ from PyQt6.QtGui import QPixmap, QMouseEvent
 from PyQt6.QtCore import Qt, QPoint
 from PIL import Image
 from PyQt6.QtWidgets import QScrollArea
-from PyQt6.QtGui import QIcon
+from PyQt6.QtGui import QIcon, QFont
 
 SCALE_FACTORS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600]
 
@@ -62,11 +62,21 @@ class ImageConverter(QWidget):
     def initUI(self):
         self.setWindowTitle("JPG/PNG to WEBP Converter")
         self.setGeometry(100, 100, 900, 600)
+        self.center_on_screen()
 
         layout = QVBoxLayout()
-        self.load_button = QPushButton("Load Image")
+
+        # Create a larger font
+        button_font = QFont()
+        button_font.setPointSize(12)  # Increase this number for bigger text
+
+        self.load_button = QPushButton("📂Load Image")
+        self.load_button.setFont(button_font)
+        self.load_button.setFixedHeight(45)
         self.load_button.clicked.connect(self.load_image)
-        self.save_button = QPushButton("Save Image")
+        self.save_button = QPushButton("💾Save Image")
+        self.save_button.setFixedHeight(45)
+        self.save_button.setFont(button_font)
         self.save_button.clicked.connect(self.save_image)
 
         self.image_layout = QGridLayout()
@@ -134,6 +144,18 @@ class ImageConverter(QWidget):
 
         self.setLayout(layout)
 
+    def center_on_screen(self):
+        """Centers the window on the screen."""
+        # Get the screen geometry
+        screen_geometry = QApplication.primaryScreen().availableGeometry()
+
+        # Calculate the center position
+        x = (screen_geometry.width() - self.width()) // 2
+        y = (screen_geometry.height() - self.height()) // 2
+
+        # Move the window to the center
+        self.move(x, y)
+
     def zoom_in(self):
         if self.scale_index < len(SCALE_FACTORS) - 1:
             self.scale_index += 1
@@ -151,12 +173,13 @@ class ImageConverter(QWidget):
             scaled_pixmap = pixmap.scaled(pixmap.width() * scale_factor // 100,
                                           pixmap.height() * scale_factor // 100,
                                           Qt.AspectRatioMode.KeepAspectRatio)
+                                          # Qt.TransformationMode.SmoothTransformation)
             self.original_label.setPixmap(scaled_pixmap)
             self.original_label.adjustSize()
             self.converted_label.setPixmap(scaled_pixmap)
             self.converted_label.adjustSize()
             self.zoom_label.setText(f"{scale_factor}%")
-            self.convert_image()
+            # self.convert_image()
 
     def update_preview(self):
         self.compression_label.setText(f"{self.quality_slider.value()}%")
