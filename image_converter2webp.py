@@ -11,6 +11,12 @@ from PyQt6.QtGui import QIcon, QFont
 
 SCALE_FACTORS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600]
 
+APP_CAPTION = "JPG/PNG to WEBP Converter"
+FILE_NAME = ''
+
+
+
+
 def resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller """
     try:
@@ -69,7 +75,7 @@ class ImageConverter(QWidget):
         self.scale_index = SCALE_FACTORS.index(100)
 
     def initUI(self):
-        self.setWindowTitle("JPG/PNG to WEBP Converter")
+        self.setWindowTitle(APP_CAPTION)
         self.setGeometry(100, 100, 900, 600)
         self.center_on_screen()
 
@@ -197,14 +203,19 @@ class ImageConverter(QWidget):
     def load_image(self):
         file_path, _ = QFileDialog.getOpenFileName(self, "Open Image", "", "Images (*.png *.jpg *.jpeg)")
         if file_path:
+            global FILE_NAME
+            FILE_NAME = file_path
             self.image_path = file_path
             self.update_zoom()
             file_size = os.path.getsize(file_path) / 1024  # KB
             self.original_size_label.setText(f'Original Size: {file_size:.2f} KB')
+            self.setWindowTitle("JPG/PNG to WEBP Converter - " + os.path.basename(FILE_NAME))
 
     def save_image(self):
+        file_name =  os.path.splitext(FILE_NAME)[0]
+        print(file_name)
         if self.image_path:
-            save_path, _ = QFileDialog.getSaveFileName(self, 'Save Image', '', 'WEBP Files (*.webp)')
+            save_path, _ = QFileDialog.getSaveFileName(self, 'Save Image', file_name, 'WEBP Files (*.webp)')
             if save_path:
                 img = Image.open(self.image_path)
                 img.save(save_path, 'WEBP', quality=self.quality_slider.value())

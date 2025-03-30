@@ -45,6 +45,18 @@ This application converts JPG, JPEG, and PNG images to WEBP format with the abil
 ## Usage 2
 Download last release, unzip and run `Image Converter 2 WEBP.exe` file.
 
+## Build executable
+1. Install PyInstaller:
+    ```sh
+    pip install pyinstaller
+    ```
+2. Build the executable:
+    ```sh
+    pyinstaller image_converter2webp.py
+    ```
+3. The executable will be created in the `dist` folder.
+4. p.s. All next builds can be done with `pyinstaller image_converter2webp.spec` command.
+
 ## License
 
 This project is licensed under the MIT License.
