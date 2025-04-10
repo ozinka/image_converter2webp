@@ -5,6 +5,9 @@ from tkinter import filedialog
 from PIL import Image, ImageTk
 import customtkinter as ctk
 import ctypes
+import time
+import io
+import threading
 
 # Set the appearance mode and color theme
 ctk.set_appearance_mode("System")  # Режим: "System", "Dark" або "Light"
@@ -13,6 +16,18 @@ ctk.set_default_color_theme("blue")  # Теми: "blue", "green", "dark-blue"
 SCALE_FACTORS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600]
 
 APP_CAPTION = "JPG/PNG to WEBP Converter"
+
+
+def timer_decorator(func):
+    def wrapper(*args, **kwargs):
+        start_time = time.time()  # Record the start time
+        result = func(*args, **kwargs)  # Call the function
+        end_time = time.time()  # Record the end time
+        duration = end_time - start_time  # Calculate the time difference
+        print(f"Function {func.__name__} took {duration:.4f} seconds to execute.")
+        return result
+
+    return wrapper
 
 
 def resource_path(relative_path):
@@ -36,7 +51,7 @@ class ImageFrame(ctk.CTkFrame):
         self._drag_start_x = 0
         self._drag_start_y = 0
 
-        self.SCALING_FACTOR = self.get_windows_scaling_factor()
+        self.SCALING_FACTOR = self.get_scaling_factor()
         print(f"Windows scaling factor: {self.SCALING_FACTOR}")
 
         # Create a frame to hold the image
@@ -73,18 +88,20 @@ class ImageFrame(ctk.CTkFrame):
                 self.app.zoom_out()
 
     # Get the Windows scaling factor
-    def get_windows_scaling_factor(self):
-        # Works only on Windows
-        user32 = ctypes.windll.user32
-        gdi32 = ctypes.windll.gdi32
+    def get_scaling_factor(self):
+        if sys.platform == "win32":
+            # Works only on Windows
+            user32 = ctypes.windll.user32
+            gdi32 = ctypes.windll.gdi32
 
-        # Get the DPI for the primary monitor
-        hdc = user32.GetDC(None)
-        dpi_x = gdi32.GetDeviceCaps(hdc, 88)  # LOGPIXELSX = 88
-        user32.ReleaseDC(None, hdc)
-
-        # 96 DPI is 100% scaling
-        return dpi_x / 96
+            # Get the DPI for the primary monitor
+            hdc = user32.GetDC(None)
+            dpi_x = gdi32.GetDeviceCaps(hdc, 88)  # LOGPIXELSX = 88
+            user32.ReleaseDC(None, hdc)
+            return dpi_x / 96
+        else:
+            # Default for other platforms
+            return 1.0
 
     def on_press(self, event):
         self._dragging = True
@@ -105,7 +122,7 @@ class ImageFrame(ctk.CTkFrame):
             y = min(self.image_label.winfo_y() + delta_y, 0)
             y = max(y, self.winfo_height() - self.image_label.winfo_height())
         else:
-            y =0
+            y = 0
         if self.winfo_width() <= self.image_label.winfo_width():
             x = min(self.image_label.winfo_x() + delta_x, 0)
             x = max(x, self.winfo_width() - self.image_label.winfo_width())
@@ -151,57 +168,69 @@ class HelpDialog(ctk.CTkToplevel):
 
         # Set the help text content
         help_text.insert("1.0", """
-Image Converter Help
+        Image Converter Help
 
-This application allows you to convert JPG, JPEG, and PNG images to WEBP format with quality control.
+        This application allows you to convert JPG, JPEG, and PNG images to WEBP format with quality control.
 
-Basic Controls:
-• 📂Load Image - Open an image file from your computer
-• 💾Save Image - Save the converted image to your computer
-• ➕/➖ - Zoom in and out of the images
-• Quality Slider - Adjust the compression quality (higher values = better quality but larger file size)
+        Basic Controls:
+        • 📂Load Image - Open an image file from your computer
+        • 💾Save Image - Save the converted image to your computer
+        • ➕/➖ - Zoom in and out of the images using keyboard shortcuts (Ctrl + '+' to zoom in, Ctrl + '-' to zoom out)
+        • Quality Slider - Adjust the compression quality (higher values = better quality but larger file size)
 
-Advanced Options:
-• Method - Select the conversion algorithm (0-6). Higher values provide better quality and smaller file size but take longer to process.
-• Lossless - Enable for lossless compression (no quality loss, but larger file size)
+        Advanced Options:
+        • Method - Select the conversion algorithm (0-6). Higher values provide better quality and smaller file size but take longer to process.
+        • Lossless - Enable for lossless compression (no quality loss, but larger file size)
 
-Image Navigation:
-You can use the zoom controls to get a closer look at details.
+        Image Navigation:
+        • Mouse Wheel: Scroll up or down to zoom in or out.
+            - For Windows/macOS: Use the mouse wheel to zoom in and out.
+            - For Linux: Use the mouse buttons (Button-4 for scroll up, Button-5 for scroll down) to zoom.
+        • Zoom Controls: You can use the zoom controls to get a closer look at details.
 
-About:
-Image Converter v1.01
-Developed by Vitaliy Osidach © 2025
+        Keyboard Shortcuts:
+        • Ctrl + O: Load an image
+        • Ctrl + S: Save the image
+        • Ctrl + '+': Zoom in
+        • Ctrl + '-': Zoom out
+        • Ctrl + H: Show this help dialog
+        • Ctrl + Q: Quit the application
 
-GitHub Repository: https://github.com/ozinka/image_converter2webp
+        About:
+        Image Converter v1.01
+        Developed by Vitaliy Osidach © 2025
 
-Built with:
-• Python 3.13
-• CustomTkinter
-• Pillow (Python Imaging Library)
-• Development assistance: ChatGPT, Claude
+        GitHub Repository: https://github.com/ozinka/image_converter2webp
 
-License:
-MIT License
-Copyright (c) 2025 Vitaliy Osidach
+        Built with:
+        • Python 3.13
+        • CustomTkinter
+        • Pillow (Python Imaging Library)
+        • Development assistance: ChatGPT, Claude
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+        License:
+        MIT License
+        Copyright (c) 2025 Vitaliy Osidach
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+        Permission is hereby granted, free of charge, to any person obtaining a copy
+        of this software and associated documentation files (the "Software"), to deal
+        in the Software without restriction, including without limitation the rights
+        to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+        copies of the Software, and to permit persons to whom the Software is
+        furnished to do so, subject to the following conditions:
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+        The above copyright notice and this permission notice shall be included in all
+        copies or substantial portions of the Software.
+
+        THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+        IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+        FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+        AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+        LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+        OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+        SOFTWARE.
         """)
+
         help_text.configure(state="disabled")  # Make read-only
 
         # OK button
@@ -245,7 +274,15 @@ class ImageConverter(ctk.CTk):
         self.title(APP_CAPTION)
         self.geometry("900x600")
         self.minsize(800, 600)
-        # self.center_on_screen()
+        self.center_on_screen()
+
+        # Keyboard shortcuts
+        self.bind("<Control-o>", lambda e: self.load_image())
+        self.bind("<Control-s>", lambda e: self.save_image())
+        self.bind("<Control-plus>", lambda e: self.zoom_in())
+        self.bind("<Control-minus>", lambda e: self.zoom_out())
+        self.bind("<Control-h>", lambda e: self.show_help())
+        self.bind("<Control-q>", lambda e: self.quit())
 
         # Main layout frame
         main_frame = ctk.CTkFrame(self)
@@ -371,6 +408,11 @@ class ImageConverter(ctk.CTk):
             self.scale_index -= 1
             self.update_zoom()
 
+    def resize_image(self, image, scale_factor):
+        width = int(image.width * scale_factor / 100)
+        height = int(image.height * scale_factor / 100)
+        return image.resize((width, height), Image.BICUBIC), width, height
+
     def update_zoom(self):
         if self.image_path:
             scale_factor = SCALE_FACTORS[self.scale_index]
@@ -378,13 +420,9 @@ class ImageConverter(ctk.CTk):
 
             # Load original image
             img = Image.open(self.image_path)
-            width = int(img.width * scale_factor / 100)
-            height = int(img.height * scale_factor / 100)
-            img_resized = img.resize((width, height), Image.LANCZOS)
-            # img_resized = img
+            img_resized, width, height = self.resize_image(img, scale_factor)
 
             # Convert to PhotoImage
-            # photo = ImageTk.PhotoImage(img_resized)
             photo = ctk.CTkImage(light_image=img_resized, dark_image=img_resized, size=(width, height))
 
             # Update original image frame
@@ -407,11 +445,14 @@ class ImageConverter(ctk.CTk):
             )
 
         if file_path:
-            self.image_path = file_path
-            self.update_zoom()
-            file_size = os.path.getsize(file_path) / 1024  # KB
-            self.original_size_label.configure(text=f'Original Size: {file_size:.2f} KB')
-            self.title(f"{APP_CAPTION} - {os.path.basename(self.image_path)}")
+            try:
+                self.image_path = file_path
+                self.update_zoom()
+                file_size = os.path.getsize(file_path) / 1024  # KB
+                self.original_size_label.configure(text=f'Original Size: {file_size:.2f} KB')
+                self.title(f"{APP_CAPTION} - {os.path.basename(self.image_path)}")
+            except Exception as e:
+                self.show_error(f"Error loading image: {e}")
 
     def save_image(self):
         if not self.image_path:
@@ -439,48 +480,46 @@ class ImageConverter(ctk.CTk):
                      icc_profile=None)
 
     def convert_image(self):
+        # Start conversion in a separate thread
+        threading.Thread(target=self._convert_image_thread, daemon=True).start()
+
+    @timer_decorator
+    def _convert_image_thread(self):
         if not self.image_path:
             return
 
-        # Create temporary file path
-        webp_path = "converted.webp"
-
-        # Convert image
+        # Convert image in memory
         img = Image.open(self.image_path)
-
         quality = int(self.quality_slider.get())
         method = int(self.method_combo.get())
         lossless = self.lossless_var.get()
 
-        # Save to WEBP format
-        img.save(webp_path, "WEBP",
-                 quality=quality,
-                 lossless=lossless,
-                 method=method,
-                 icc_profile=None)
+        # Save to BytesIO instead of file
+        buffer = io.BytesIO()
+        img.save(buffer, "WEBP", quality=quality, lossless=lossless, method=method, icc_profile=None)
 
-        # Get the converted file size
-        estimated_size = os.path.getsize(webp_path) / 1024  # KB
+        # Get byte size
+        estimated_size = len(buffer.getvalue()) / 1024  # KB
         self.converted_size_label.configure(text=f'Estimated Size: {estimated_size:.2f} KB')
+
+        # Reset buffer position
+        buffer.seek(0)
+
+        # Load the converted image
+        webp_img = Image.open(buffer)
 
         # Load the converted image
         scale_factor = SCALE_FACTORS[self.scale_index]
 
-        webp_img = Image.open(webp_path)
-        width = int(webp_img.width * scale_factor / 100)
-        height = int(webp_img.height * scale_factor / 100)
-        webp_resized = webp_img.resize((width, height), Image.LANCZOS)
+        webp_resized, width, height = self.resize_image(webp_img, scale_factor)
 
         # Convert to PhotoImage
-        # photo = ImageTk.PhotoImage(webp_resized)
         photo = ctk.CTkImage(light_image=webp_resized, dark_image=webp_resized, size=(width, height))
 
         # Update converted image frame
         self.converted_image = photo  # Keep reference
-        self.converted_frame.set_image(photo)
-
-        # Remove temporary file
-        os.remove(webp_path)
+        self.after(0, lambda: self.converted_frame.set_image(photo))
+        # self.converted_frame.set_image(photo)
 
     def show_help(self):
         help_dialog = HelpDialog(self)
