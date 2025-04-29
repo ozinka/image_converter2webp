@@ -316,8 +316,7 @@ class ImageConverter(QWidget):
         self.convert_image()
 
     def load_image(self, file_path=None):
-        if file_path is None:
-            file_path, _ = QFileDialog.getOpenFileName(self, "Open Image", "", "Images (*.png *.jpg *.jpeg)")
+        file_path, _ = QFileDialog.getOpenFileName(self, "Open Image", "", "Images (*.png *.jpg *.jpeg)")
         if file_path:
             self.image_path = file_path
             self.update_zoom()
