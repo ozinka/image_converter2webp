@@ -50,13 +50,19 @@ class ImageFrame(ctk.CTkFrame):
         self._dragging = False
         self._drag_start_x = 0
         self._drag_start_y = 0
+        self._scroll_x = 0  # Track scroll position
+        self._scroll_y = 0  # Track scroll position
 
         self.SCALING_FACTOR = self.get_scaling_factor()
         print(f"Windows scaling factor: {self.SCALING_FACTOR}")
 
-        # Create a frame to hold the image
-        self.image_container = ctk.CTkFrame(self, fg_color="transparent")
-        self.image_container.pack(expand=True, fill="both")
+        # Create a canvas to hold the image
+        self.canvas = ctk.CTkCanvas(self, highlightthickness=0, bd=0)
+        self.canvas.pack(expand=True, fill="both")
+
+        # Create a frame inside the canvas to hold the image
+        self.image_container = ctk.CTkFrame(self.canvas, fg_color="transparent")
+        self.canvas_window = self.canvas.create_window(0, 0, window=self.image_container, anchor="nw")
 
         # Prevent automatic resizing based on content
         self.pack_propagate(False)
@@ -66,13 +72,41 @@ class ImageFrame(ctk.CTkFrame):
         self.image_label.pack(expand=True, fill="both")
         self.image_label.configure(width=400, height=300)
 
-        self.image_label.bind("<ButtonPress-1>", self.on_press)
-        self.image_label.bind("<B1-Motion>", self.on_drag)
-        self.image_label.bind("<ButtonRelease-1>", self.on_release)
+        # Configure canvas scrolling behavior
+        self.canvas.bind("<ButtonPress-1>", self.on_press)
+        self.canvas.bind("<B1-Motion>", self.on_drag)
+        self.canvas.bind("<ButtonRelease-1>", self.on_release)
 
-        self.image_label.bind("<MouseWheel>", self.on_mouse_scroll)  # Windows/macOS
-        self.image_label.bind("<Button-4>", self.on_mouse_scroll_linux)  # Linux scroll up
-        self.image_label.bind("<Button-5>", self.on_mouse_scroll_linux)  # Linux scroll down)
+        self.canvas.bind("<MouseWheel>", self.on_mouse_scroll)  # Windows/macOS
+        self.canvas.bind("<Button-4>", self.on_mouse_scroll_linux)  # Linux scroll up
+        self.canvas.bind("<Button-5>", self.on_mouse_scroll_linux)  # Linux scroll down
+
+        # Bind to configure event to update the scrollregion when the frame size changes
+        self.bind("<Configure>", self.on_configure)
+        self.image_container.bind("<Configure>", self.on_image_configure)
+
+    def on_configure(self, event):
+        # Update the scrollable area when the frame is resized
+        self.update_scroll_region()
+
+    def on_image_configure(self, event):
+        # Update the scrollable area when the image container changes
+        self.update_scroll_region()
+
+    def update_scroll_region(self):
+        # Update the canvas's scroll region to encompass the inner frame
+        if hasattr(self.image_label, 'image') and self.image_label.image is not None:
+            content_width = self.image_label.winfo_reqwidth()
+            content_height = self.image_label.winfo_reqheight()
+            frame_width = self.winfo_width()
+            frame_height = self.winfo_height()
+
+            # Set the scroll region to the size of the image
+            self.canvas.configure(
+                scrollregion=(0, 0, max(content_width, frame_width), max(content_height, frame_height)))
+
+            # Ensure the image container is sized appropriately
+            self.image_container.configure(width=content_width, height=content_height)
 
     def on_mouse_scroll(self, event):
         if event.delta > 0:
@@ -109,6 +143,10 @@ class ImageFrame(ctk.CTkFrame):
         self._drag_start_y = event.y
         self.configure(cursor="fleur")
 
+        # Save current scroll position
+        self._scroll_x = self.canvas.canvasx(0)
+        self._scroll_y = self.canvas.canvasy(0)
+
     def on_drag(self, event):
         if not self._dragging:
             return
@@ -116,26 +154,37 @@ class ImageFrame(ctk.CTkFrame):
         # Calculate movement delta
         delta_x = event.x - self._drag_start_x
         delta_y = event.y - self._drag_start_y
-        x = self.image_label.winfo_x() + delta_x
-        y = self.image_label.winfo_y() + delta_y
-        if self.winfo_height() <= self.image_label.winfo_height():
-            y = min(self.image_label.winfo_y() + delta_y, 0)
-            y = max(y, self.winfo_height() - self.image_label.winfo_height())
-        else:
-            y = 0
-        if self.winfo_width() <= self.image_label.winfo_width():
-            x = min(self.image_label.winfo_x() + delta_x, 0)
-            x = max(x, self.winfo_width() - self.image_label.winfo_width())
-        else:
-            x = 0
 
-        self.set_image_position(x=x, y=y)
-        # Sync with other frame
+        # Calculate new scroll position
+        new_x = self._scroll_x - delta_x
+        new_y = self._scroll_y - delta_y
+
+        # Apply boundaries
+        content_width = self.image_label.winfo_reqwidth()
+        content_height = self.image_label.winfo_reqheight()
+        frame_width = self.winfo_width()
+        frame_height = self.winfo_height()
+
+        max_x = max(0, content_width - frame_width)
+        max_y = max(0, content_height - frame_height)
+
+        new_x = max(0, min(new_x, max_x))
+        new_y = max(0, min(new_y, max_y))
+
+        # Move the canvas view
+        self.canvas.xview_moveto(new_x / content_width if content_width > 0 else 0)
+        self.canvas.yview_moveto(new_y / content_height if content_height > 0 else 0)
+
+        # Sync with other frame if needed
         if self.sync_frame:
-            self.sync_frame.set_image_position(x=x, y=y)
+            x_fraction = self.canvas.xview()
+            y_fraction = self.canvas.yview()
+            self.sync_frame.set_view_position(x_fraction, y_fraction)
 
-    def set_image_position(self, x, y):
-        self.image_label.place(x=x / self.SCALING_FACTOR, y=y / self.SCALING_FACTOR)
+    def set_view_position(self, x_fraction, y_fraction):
+        # Set the view position based on fractions (0-1)
+        self.canvas.xview_moveto(x_fraction[0])
+        self.canvas.yview_moveto(y_fraction[0])
 
     def on_release(self, event):
         self._dragging = False
@@ -145,10 +194,13 @@ class ImageFrame(ctk.CTkFrame):
         if hasattr(self.image_label, 'image') and self.image_label.image is not None:
             self.image_label.configure(image=image)
         else:
-            self.image_label.place(x=0, y=0)
             self.image_label.configure(image=image)
 
         self.image_label.image = image  # Prevent GC
+
+        # Update the scroll region after setting a new image
+        # Use after() to ensure the widget has been updated
+        self.after(100, self.update_scroll_region)
 
 
 class HelpDialog(ctk.CTkToplevel):

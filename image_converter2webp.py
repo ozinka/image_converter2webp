@@ -91,7 +91,7 @@ class ImageConverter(QWidget):
         self.load_button = QPushButton("📂Load Image")
         self.load_button.setFont(button_font)
         self.load_button.setFixedHeight(45)
-        self.load_button.clicked.connect(self.load_image)
+        self.load_button.clicked.connect(lambda: self.load_image(None))
         self.save_button = QPushButton("💾Save Image")
         self.save_button.setFixedHeight(45)
         self.save_button.setFont(button_font)
@@ -316,7 +316,9 @@ class ImageConverter(QWidget):
         self.convert_image()
 
     def load_image(self, file_path=None):
-        file_path, _ = QFileDialog.getOpenFileName(self, "Open Image", "", "Images (*.png *.jpg *.jpeg)")
+        if file_path is None:
+            file_path, _ = QFileDialog.getOpenFileName(self, "Open Image", "", "Images (*.png *.jpg *.jpeg)")
+
         if file_path:
             self.image_path = file_path
             self.update_zoom()
