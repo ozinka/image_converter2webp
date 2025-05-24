@@ -2,10 +2,10 @@ import sys
 import os
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QLabel, QPushButton, QVBoxLayout, QFileDialog, QSlider, QHBoxLayout, QGridLayout,
-    QMessageBox, QCheckBox, QComboBox, QDialogButtonBox, QTextBrowser, QDialog
+    QCheckBox, QComboBox, QDialogButtonBox, QTextBrowser, QDialog
 )
-from PyQt6.QtGui import QPixmap, QMouseEvent, QPalette, QColor
-from PyQt6.QtCore import Qt, QPoint, QSettings
+from PyQt6.QtGui import QPixmap, QMouseEvent
+from PyQt6.QtCore import Qt, QPoint
 from PIL import Image
 from PyQt6.QtWidgets import QScrollArea
 from PyQt6.QtGui import QIcon, QFont
@@ -346,19 +346,24 @@ class ImageConverter(QWidget):
     def convert_image(self):
         if self.image_path:
             img = Image.open(self.image_path)
-            webp_path = "converted.webp"
 
             quality = self.quality_slider.value()
             method = int(self.method_combo.currentText())
             lossless = self.lossless_checkbox.isChecked()
 
-            img.save(webp_path, "WEBP",
+            buffer = BytesIO()
+            img.save(buffer, format="WEBP",
                      quality=quality,
                      lossless=lossless,
                      method=method,
                      icc_profile=None)
+            buffer.seek(0)
 
-            pixmap = QPixmap(webp_path)
+            # Load QPixmap directly from memory
+            data = buffer.read()
+            pixmap = QPixmap()
+            pixmap.loadFromData(data, "WEBP")
+
             scale_factor = SCALE_FACTORS[self.scale_index]
             scaled_pixmap = pixmap.scaled(pixmap.width() * scale_factor // 100,
                                           pixmap.height() * scale_factor // 100,
@@ -366,10 +371,9 @@ class ImageConverter(QWidget):
             self.converted_label.setPixmap(scaled_pixmap)
             self.converted_label.adjustSize()
 
-            estimated_size = os.path.getsize(webp_path) / 1024  # KB
+            # Estimate size from buffer
+            estimated_size = len(data) / 1024  # KB
             self.converted_size_label.setText(f'Estimated Size: {estimated_size:.2f} KB')
-
-            os.remove(webp_path)
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():
