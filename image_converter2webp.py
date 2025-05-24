@@ -1,5 +1,7 @@
 import sys
 import os
+from io import BytesIO
+
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QLabel, QPushButton, QVBoxLayout, QFileDialog, QSlider, QHBoxLayout, QGridLayout,
     QCheckBox, QComboBox, QDialogButtonBox, QTextBrowser, QDialog
