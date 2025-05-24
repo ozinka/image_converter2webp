@@ -1,0 +1,14 @@
+# How to build the image_converter2webp.py script into an executable using PyInstaller
+pyinstaller .\image_converter2webp.py
+
+# How to build the image_converter2webp.py script into an executable using Nuitka
+nuitka.cmd .\image_converter2webp.py `
+  --standalone `
+  --enable-plugin=pyqt6 `
+  --include-data-dir=media=media `
+  --windows-icon-from-ico=media/favicon.ico `
+  --windows-disable-console `
+  --output-dir=dist `
+  --remove-output `
+  --show-progress `
+  --show-memory
