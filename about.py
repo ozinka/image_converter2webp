@@ -2,7 +2,7 @@ from version import __version__
 
 about_text = f"""
             <h2>Image Converter Help</h2>
-            <p>This application allows you to convert JPG, JPEG, and PNG images to WEBP format with quality control.</p>
+            <p>This application allows you to convert JPG/JPEG/PNG/BMP images to WEBP format with quality control.</p>
 
             <h3>Basic Controls</h3>
             <ul>
@@ -29,9 +29,9 @@ about_text = f"""
             <p>GitHub Repository: <a href="https://github.com/ozinka/image_converter2webp">ozinka/image_converter2webp</a></p>
             <p>Built with:</p>
             <ul>
-                <li>Python 3.12</li>
+                <li>Python 3.13</li>
                 <li>PyQt6</li>
-                <li>Pillow (Python Imaging Library)</li>
+                <li>OpenCV2 (Python Imaging Library)</li>
                 <li>Builders: PyInstaller, Nuitka</li>
                 <li>Development assistance: ChatGPT, Claude</li>
             </ul>

@@ -3,13 +3,15 @@ import os
 from io import BytesIO
 from time import perf_counter
 
+import cv2
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QLabel, QPushButton, QVBoxLayout, QFileDialog, QSlider, QHBoxLayout, QGridLayout,
     QCheckBox, QComboBox, QDialogButtonBox, QTextBrowser, QDialog
 )
 from PyQt6.QtGui import QPixmap, QMouseEvent
 from PyQt6.QtCore import Qt, QPoint, QTimer, QThread, pyqtSignal, QObject
-from PIL import Image
+# from PIL import Image
+
 from PyQt6.QtWidgets import QScrollArea
 from PyQt6.QtGui import QIcon, QFont
 
@@ -17,7 +19,7 @@ from about import about_text
 
 SCALE_FACTORS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600]
 
-APP_CAPTION = "JPG/PNG to WEBP Converter"
+APP_CAPTION = "JPG/PNG/BMP to WEBP Converter"
 
 
 def resource_path(relative_path):
@@ -30,6 +32,13 @@ def resource_path(relative_path):
 
     return os.path.join(base_path, relative_path)
 
+def convert_to_webp_opencv(input_path, quality=80):
+    img = cv2.imread(input_path)  # Load image (BGR format)
+    encode_params = [int(cv2.IMWRITE_WEBP_QUALITY), quality]
+    success, encoded_img = cv2.imencode('.webp', img, encode_params)
+    if success:
+        return encoded_img.tobytes(), len(encoded_img) / 1024  # Returns bytes, size in KB
+    return None, 0
 
 class DraggableLabel(QLabel):
     def __init__(self, scroll_area, sync_scroll_area):
@@ -84,17 +93,15 @@ class ImageConversionWorker(QObject):
 
     def run(self):
         self.started.emit()
-        img = Image.open(self.image_path)
-        buffer = BytesIO()
-        img.save(buffer, format="WEBP",
-                 quality=self.quality,
-                 lossless=self.lossless,
-                 method=self.method,
-                 icc_profile=None)
-        buffer.seek(0)
-        data = buffer.read()
-        estimated_size = len(data) / 1024  # KB
-        self.finished.emit(data, estimated_size)
+        img = cv2.imread(self.image_path)
+        encode_params = [
+            int(cv2.IMWRITE_WEBP_QUALITY), self.quality
+        ]
+        success, buffer = cv2.imencode('.webp', img, encode_params)
+        if success:
+            data = buffer.tobytes()
+            estimated_size = len(data) / 1024
+            self.finished.emit(data, estimated_size)
 
 
 class ImageConverter(QWidget):
@@ -314,14 +321,14 @@ class ImageConverter(QWidget):
 
     def load_image(self, file_path=None):
         if file_path is None:
-            file_path, _ = QFileDialog.getOpenFileName(self, "Open Image", "", "Images (*.png *.jpg *.jpeg)")
+            file_path, _ = QFileDialog.getOpenFileName(self, "Open Image", "", "Images (*.png *.jpg *.jpeg *.bmp *.webp)")
 
         if file_path:
             self.image_path = file_path
             self.update_zoom()
             file_size = os.path.getsize(file_path) / 1024  # KB
             self.original_size_label.setText(f'Original Size: {file_size:.2f} KB')
-            self.setWindowTitle("JPG/PNG to WEBP Converter - " + os.path.basename(self.image_path))
+            self.setWindowTitle("JPG/PNG/BMP to WEBP Converter - " + os.path.basename(self.image_path))
 
     def save_image(self):
         file_name = os.path.splitext(self.image_path)[0]
