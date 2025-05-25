@@ -7,11 +7,12 @@ from PyQt6.QtWidgets import (
     QCheckBox, QComboBox, QDialogButtonBox, QTextBrowser, QDialog
 )
 from PyQt6.QtGui import QPixmap, QMouseEvent
-from PyQt6.QtCore import Qt, QPoint
+from PyQt6.QtCore import Qt, QPoint, QTimer, QThread, pyqtSignal, QObject
 from PIL import Image
 from PyQt6.QtWidgets import QScrollArea
 from PyQt6.QtGui import QIcon, QFont
-from version import __version__
+
+from about import about_text
 
 SCALE_FACTORS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600]
 
@@ -69,6 +70,32 @@ class DraggableLabel(QLabel):
             self.setCursor(Qt.CursorShape.OpenHandCursor)
 
 
+class ImageConversionWorker(QObject):
+    finished = pyqtSignal(bytes, float)  # data, estimated size
+    started = pyqtSignal()
+
+    def __init__(self, image_path, quality, method, lossless):
+        super().__init__()
+        self.image_path = image_path
+        self.quality = quality
+        self.method = method
+        self.lossless = lossless
+
+    def run(self):
+        self.started.emit()
+        img = Image.open(self.image_path)
+        buffer = BytesIO()
+        img.save(buffer, format="WEBP",
+                 quality=self.quality,
+                 lossless=self.lossless,
+                 method=self.method,
+                 icc_profile=None)
+        buffer.seek(0)
+        data = buffer.read()
+        estimated_size = len(data) / 1024  # KB
+        self.finished.emit(data, estimated_size)
+
+
 class ImageConverter(QWidget):
     def __init__(self):
         super().__init__()
@@ -77,6 +104,8 @@ class ImageConverter(QWidget):
         self.scale_index = SCALE_FACTORS.index(100)
         self.setAcceptDrops(True)
         self.center_on_screen()
+        self._conversion_thread = None
+        self._conversion_worker = None
 
     def initUI(self):
         self.setWindowTitle(APP_CAPTION)
@@ -210,62 +239,7 @@ class ImageConverter(QWidget):
 
         help_text = QTextBrowser()
         help_text.setOpenExternalLinks(True)
-        help_text.setHtml(f"""
-            <h2>Image Converter Help</h2>
-            <p>This application allows you to convert JPG, JPEG, and PNG images to WEBP format with quality control.</p>
-
-            <h3>Basic Controls</h3>
-            <ul>
-                <li><strong>📂Load Image</strong> - Open an image file from your computer</li>
-                <li><strong>💾Save Image</strong> - Save the converted image to your computer</li>
-                <li><strong>➕/➖</strong> - Zoom in and out of the images</li>
-                <li><strong>Quality Slider</strong> - Adjust the compression quality (higher values = better quality but larger file size)</li>
-                <li><strong>Drag and Drop</strong> - You can also drag image files directly onto the main window to open them</li>
-            </ul>
-
-            <h3>Advanced Options</h3>
-            <ul>
-                <li><strong>Method</strong> - Select the conversion algorithm (0-6). Higher values provide better quality and smaller file size but take longer to process.</li>
-                <li><strong>Lossless</strong> - Enable for lossless compression (no quality loss, but larger file size)</li>
-            </ul>
-
-            <h3>Image Navigation</h3>
-            <p>You can drag the images to pan around, and use the zoom controls to get a closer look at details.</p>
-
-            <hr>
-            <h3>About</h3>
-            <p><strong>Image Converter {__version__}</strong></p>
-            <p>Developed by Vitaliy Osidach &copy; 2025</p>
-            <p>GitHub Repository: <a href="https://github.com/ozinka/image_converter2webp">ozinka/image_converter2webp</a></p>
-            <p>Built with:</p>
-            <ul>
-                <li>Python 3.13</li>
-                <li>PyQt6</li>
-                <li>Pillow (Python Imaging Library)</li>
-                <li>Development assistance: ChatGPT, Claude</li>
-            </ul>
-
-            <h4>License</h4>
-            <p>MIT License</p>
-            <p>Copyright (c) 2025 Vitaliy Osidach</p>
-            <p>Permission is hereby granted, free of charge, to any person obtaining a copy
-            of this software and associated documentation files (the "Software"), to deal
-            in the Software without restriction, including without limitation the rights
-            to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-            copies of the Software, and to permit persons to whom the Software is
-            furnished to do so, subject to the following conditions:</p>
-
-            <p>The above copyright notice and this permission notice shall be included in all
-            copies or substantial portions of the Software.</p>
-
-            <p>THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-            IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-            FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-            AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-            LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-            OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-            SOFTWARE.</p>
-        """)
+        help_text.setHtml(about_text)
 
         layout.addWidget(help_text)
 
@@ -305,17 +279,18 @@ class ImageConverter(QWidget):
             scaled_pixmap = pixmap.scaled(pixmap.width() * scale_factor // 100,
                                           pixmap.height() * scale_factor // 100,
                                           Qt.AspectRatioMode.KeepAspectRatio)
-            # Qt.TransformationMode.SmoothTransformation)
             self.original_label.setPixmap(scaled_pixmap)
             self.original_label.adjustSize()
-            # self.converted_label.setPixmap(scaled_pixmap)
-            # self.converted_label.adjustSize()
             self.zoom_label.setText(f"{scale_factor}%")
             self.convert_image()
 
     def update_preview(self):
         self.compression_label.setText(f"{self.quality_slider.value()}%")
-        self.convert_image()
+        try:
+            self.convert_image()
+        except RuntimeError:
+            # Thread was likely destroyed due to GC, retry clean
+            QTimer.singleShot(0, self.convert_image)
 
     def load_image(self, file_path=None):
         if file_path is None:
@@ -346,36 +321,50 @@ class ImageConverter(QWidget):
                          icc_profile=None)
 
     def convert_image(self):
-        if self.image_path:
-            img = Image.open(self.image_path)
+        if not self.image_path:
+            return
 
-            quality = self.quality_slider.value()
-            method = int(self.method_combo.currentText())
-            lossless = self.lossless_checkbox.isChecked()
+        # Optional: attempt to stop any existing thread cleanly without accessing deleted objects
+        try:
+            if self._conversion_thread and self._conversion_thread.isRunning():
+                self._conversion_thread.quit()
+                self._conversion_thread.wait()
+        except RuntimeError:
+            # The thread was already deleted; safely ignore
+            pass
 
-            buffer = BytesIO()
-            img.save(buffer, format="WEBP",
-                     quality=quality,
-                     lossless=lossless,
-                     method=method,
-                     icc_profile=None)
-            buffer.seek(0)
+        quality = self.quality_slider.value()
+        method = int(self.method_combo.currentText())
+        lossless = self.lossless_checkbox.isChecked()
 
-            # Load QPixmap directly from memory
-            data = buffer.read()
-            pixmap = QPixmap()
-            pixmap.loadFromData(data, "WEBP")
+        # Create new thread and worker each time
+        thread = QThread(self)
+        worker = ImageConversionWorker(self.image_path, quality, method, lossless)
+        worker.moveToThread(thread)
 
-            scale_factor = SCALE_FACTORS[self.scale_index]
-            scaled_pixmap = pixmap.scaled(pixmap.width() * scale_factor // 100,
-                                          pixmap.height() * scale_factor // 100,
-                                          Qt.AspectRatioMode.KeepAspectRatio)
-            self.converted_label.setPixmap(scaled_pixmap)
-            self.converted_label.adjustSize()
+        thread.started.connect(worker.run)
+        worker.finished.connect(self.on_conversion_finished)
+        worker.finished.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
 
-            # Estimate size from buffer
-            estimated_size = len(data) / 1024  # KB
-            self.converted_size_label.setText(f'Estimated Size: {estimated_size:.2f} KB')
+        # Save references only while thread is alive
+        self._conversion_thread = thread
+        self._conversion_worker = worker
+
+        thread.start()
+
+    def on_conversion_finished(self, data, estimated_size):
+        pixmap = QPixmap()
+        pixmap.loadFromData(data, "WEBP")
+
+        scale_factor = SCALE_FACTORS[self.scale_index]
+        scaled_pixmap = pixmap.scaled(pixmap.width() * scale_factor // 100,
+                                      pixmap.height() * scale_factor // 100,
+                                      Qt.AspectRatioMode.KeepAspectRatio)
+        self.converted_label.setPixmap(scaled_pixmap)
+        self.converted_label.adjustSize()
+        self.converted_size_label.setText(f'Estimated Size: {estimated_size:.2f} KB')
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():
@@ -388,6 +377,7 @@ class ImageConverter(QWidget):
         if urls:
             file_path = urls[0].toLocalFile()
             self.load_image(file_path)
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
