@@ -1,6 +1,7 @@
 import sys
 import os
 from io import BytesIO
+from time import perf_counter
 
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QLabel, QPushButton, QVBoxLayout, QFileDialog, QSlider, QHBoxLayout, QGridLayout,
@@ -107,6 +108,13 @@ class ImageConverter(QWidget):
         self._conversion_thread = None
         self._conversion_worker = None
 
+        self._debounce_timer = QTimer(self)
+        self._debounce_timer.setSingleShot(True)
+        self._debounce_timer.timeout.connect(self.convert_image)
+
+        self._last_conversion_params = None
+        self._last_conversion_time_ms = 150  # Default debounce time in milliseconds, responsible for  UI convertion responsiveness
+
     def initUI(self):
         self.setWindowTitle(APP_CAPTION)
         self.setGeometry(100, 100, 900, 600)
@@ -142,6 +150,13 @@ class ImageConverter(QWidget):
         self.converted_scroll.setWidgetResizable(True)
         self.image_layout.addWidget(self.converted_scroll, 1, 2)  # Row 1
 
+        self.fps_overlay_label = QLabel("0 fps", self.converted_scroll)
+        self.fps_overlay_label.setStyleSheet(
+            "QLabel { background-color: rgba(0, 0, 0, 128); color: white; padding: 2px; }")
+        self.fps_overlay_label.move(5, 5)
+        self.fps_overlay_label.raise_()
+        self.fps_overlay_label.show()
+
         self.zoom_layout = QVBoxLayout()
         self.zoom_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.zoom_in_button = QPushButton("➕")
@@ -169,9 +184,15 @@ class ImageConverter(QWidget):
         self.zoom_out_button.clicked.connect(self.zoom_out)
         self.help_button.clicked.connect(self.show_help)
 
-        # Add original size label
+        # Add original size label and FPS label
         self.original_size_label = QLabel("Original Size: -")
-        self.image_layout.addWidget(self.original_size_label, 2, 0)
+        self.image_size_label = QLabel("Image size: -")
+        original_info_layout = QHBoxLayout()
+        original_info_layout.addWidget(self.original_size_label)
+        original_info_layout.addStretch()
+        original_info_layout.addWidget(self.image_size_label)
+
+        self.image_layout.addLayout(original_info_layout, 2, 0)
 
         # Add converted size label
         self.converted_size_label = QLabel("Converted Size: -")
@@ -286,11 +307,11 @@ class ImageConverter(QWidget):
 
     def update_preview(self):
         self.compression_label.setText(f"{self.quality_slider.value()}%")
-        try:
-            self.convert_image()
-        except RuntimeError:
-            # Thread was likely destroyed due to GC, retry clean
-            QTimer.singleShot(0, self.convert_image)
+
+        # Calculate dynamic delay based on last conversion time
+        delay = max(100, min(300, self._last_conversion_time_ms))
+        self._debounce_timer.start(delay)
+        print(delay)
 
     def load_image(self, file_path=None):
         if file_path is None:
@@ -323,6 +344,17 @@ class ImageConverter(QWidget):
     def convert_image(self):
         if not self.image_path:
             return
+
+        self._conversion_start_time = perf_counter()
+
+        quality = self.quality_slider.value()
+        method = int(self.method_combo.currentText())
+        lossless = self.lossless_checkbox.isChecked()
+
+        params = (quality, method, lossless)
+        if params == self._last_conversion_params:
+            return  # No change, skip
+        self._last_conversion_params = params
 
         # Optional: attempt to stop any existing thread cleanly without accessing deleted objects
         try:
@@ -358,6 +390,19 @@ class ImageConverter(QWidget):
         pixmap = QPixmap()
         pixmap.loadFromData(data, "WEBP")
 
+        # Show FPS
+        duration = (perf_counter() - self._conversion_start_time) * 1000  # ms
+        self._last_conversion_time_ms = int(duration)
+
+        if duration > 0:
+            fps = 1000.0 / duration
+            self.fps_overlay_label.setText(f"{fps:.1f} pfs")
+            self.fps_overlay_label.adjustSize()
+        else:
+            self.fps_overlay_label.setText("0 pfs")
+            self.fps_overlay_label.adjustSize()
+
+        # Resize converted image
         scale_factor = SCALE_FACTORS[self.scale_index]
         scaled_pixmap = pixmap.scaled(pixmap.width() * scale_factor // 100,
                                       pixmap.height() * scale_factor // 100,
@@ -365,6 +410,9 @@ class ImageConverter(QWidget):
         self.converted_label.setPixmap(scaled_pixmap)
         self.converted_label.adjustSize()
         self.converted_size_label.setText(f'Estimated Size: {estimated_size:.2f} KB')
+
+        # Show actual image size under original image
+        self.image_size_label.setText(f"Image size: {pixmap.width()}x{pixmap.height()} px")
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():
