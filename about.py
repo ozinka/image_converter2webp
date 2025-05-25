@@ -29,9 +29,10 @@ about_text = f"""
             <p>GitHub Repository: <a href="https://github.com/ozinka/image_converter2webp">ozinka/image_converter2webp</a></p>
             <p>Built with:</p>
             <ul>
-                <li>Python 3.13</li>
+                <li>Python 3.12</li>
                 <li>PyQt6</li>
                 <li>Pillow (Python Imaging Library)</li>
+                <li>Builders: PyInstaller, Nuitka</li>
                 <li>Development assistance: ChatGPT, Claude</li>
             </ul>
 

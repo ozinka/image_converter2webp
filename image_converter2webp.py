@@ -311,7 +311,6 @@ class ImageConverter(QWidget):
         # Calculate dynamic delay based on last conversion time
         delay = max(100, min(300, self._last_conversion_time_ms))
         self._debounce_timer.start(delay)
-        print(delay)
 
     def load_image(self, file_path=None):
         if file_path is None:
@@ -350,8 +349,9 @@ class ImageConverter(QWidget):
         quality = self.quality_slider.value()
         method = int(self.method_combo.currentText())
         lossless = self.lossless_checkbox.isChecked()
+        file_name = self.image_path
 
-        params = (quality, method, lossless)
+        params = (quality, method, lossless, file_name)
         if params == self._last_conversion_params:
             return  # No change, skip
         self._last_conversion_params = params

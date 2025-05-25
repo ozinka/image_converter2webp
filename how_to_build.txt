@@ -1,14 +1,26 @@
-# How to build the image_converter2webp.py script into an executable using PyInstaller
-pyinstaller .\image_converter2webp.py
+If you want to build .exe application that doesn't require Python installation, install one of the next modules: Nuitka or PyInstaller.
+Uncomment respective line in requirements.txt.
 
-# How to build the image_converter2webp.py script into an executable using Nuitka
-nuitka.cmd .\image_converter2webp.py `
+As checked, Nuitka makes about 22% smaller final result: 72 Mb vs 88 MB.
+
+# How to build the image_converter2webp.py script into an executable using PyInstaller
+pyinstaller image_converter2webp.spec --distpath release\dist_pyi --workpath release\build_pyi
+
+# How to build the image_converter2webp.py script into an executable using Nuitka using PowerShell
+nuitka .\image_converter2webp.py `
   --standalone `
   --enable-plugin=pyqt6 `
   --include-data-dir=media=media `
-  --windows-icon-from-ico=media/favicon.ico `
+  --windows-icon-from-ico=media\favicon.ico `
   --windows-disable-console `
-  --output-dir=dist `
+  --output-dir=release\dist_nui `
   --remove-output `
   --show-progress `
-  --show-memory
+  --show-memory `
+  --nofollow-import-to=tkinter `
+  --assume-yes-for-downloads `
+  --lto=yes `
+  --noinclude-default-mode=error
+
+
+  # to bump version: python bump_version.py

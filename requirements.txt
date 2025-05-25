@@ -1,2 +1,4 @@
 pillow==11.1.0
 PyQt6==6.8.1
+# Nuitka==2.7.3
+# pyinstaller==6.13.0
