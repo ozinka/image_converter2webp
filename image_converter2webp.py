@@ -308,7 +308,7 @@ class ImageConverter(QWidget):
                                           pixmap.height() * scale_factor // 100,
                                           Qt.AspectRatioMode.KeepAspectRatio)
             self.original_label.setPixmap(scaled_pixmap)
-            self.original_label.adjustSize()
+            self.converted_label.setPixmap(scaled_pixmap)
             self.zoom_label.setText(f"{scale_factor}%")
             self.convert_image()
 
