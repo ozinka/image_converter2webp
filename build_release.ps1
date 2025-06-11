@@ -1,5 +1,3 @@
-# build.ps1
-
 # Ensure we're in the project root
 $scriptPath = $MyInvocation.MyCommand.Path
 $projectRoot = Split-Path -Parent $scriptPath
@@ -9,15 +7,25 @@ Set-Location $projectRoot
 Remove-Item -Recurse -Force release\build_pyi, release\dist_pyi -ErrorAction SilentlyContinue
 
 # Step 1: Bump version and extract version string
-Write-Host "Bumping version..."
-$bumpOutput = python .\bump_version.py
-if ($bumpOutput -match "Bumped version to:\s*(\d+\.\d+\.\d+)") {
+#Write-Host "Bumping version..."
+#$bumpOutput = python .\bump_version.py
+#if ($bumpOutput -match "Bumped version to:\s*(\d+\.\d+\.\d+)") {
+#    $version = $Matches[1]
+#} else {
+#    Write-Error "Could not parse version string."
+#    exit 1
+#}
+
+# Read version from version.py
+$versionFile = Get-Content .\version.py | Select-String -Pattern '__version__\s*=\s*"(.*)"'
+if ($versionFile -match '"(.*)"') {
     $version = $Matches[1]
 } else {
-    Write-Error "Could not parse version string."
+    Write-Error "Could not parse version string from version.py."
     exit 1
 }
-Write-Host "New version: $version"
+
+Write-Host "Version: $version"
 
 # Step 2: Build with PyInstaller
 Write-Host "Building with PyInstaller..."

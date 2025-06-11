@@ -1,17 +1,14 @@
 import sys
 import os
-from io import BytesIO
+import io
 from time import perf_counter
 
-import cv2
-from PyQt6.QtWidgets import (
-    QApplication, QWidget, QLabel, QPushButton, QVBoxLayout, QFileDialog, QSlider, QHBoxLayout, QGridLayout,
-    QCheckBox, QComboBox, QDialogButtonBox, QTextBrowser, QDialog
-)
+from PIL import Image
+
+from PyQt6.QtWidgets import (QApplication, QWidget, QLabel, QPushButton, QVBoxLayout, QFileDialog, QSlider, QHBoxLayout,
+                             QGridLayout, QCheckBox, QComboBox, QDialogButtonBox, QTextBrowser, QDialog)
 from PyQt6.QtGui import QPixmap, QMouseEvent
 from PyQt6.QtCore import Qt, QPoint, QTimer, QThread, pyqtSignal, QObject
-# from PIL import Image
-
 from PyQt6.QtWidgets import QScrollArea
 from PyQt6.QtGui import QIcon, QFont
 
@@ -32,13 +29,6 @@ def resource_path(relative_path):
 
     return os.path.join(base_path, relative_path)
 
-def convert_to_webp_opencv(input_path, quality=80):
-    img = cv2.imread(input_path)  # Load image (BGR format)
-    encode_params = [int(cv2.IMWRITE_WEBP_QUALITY), quality]
-    success, encoded_img = cv2.imencode('.webp', img, encode_params)
-    if success:
-        return encoded_img.tobytes(), len(encoded_img) / 1024  # Returns bytes, size in KB
-    return None, 0
 
 class DraggableLabel(QLabel):
     def __init__(self, scroll_area, sync_scroll_area):
@@ -81,27 +71,41 @@ class DraggableLabel(QLabel):
 
 
 class ImageConversionWorker(QObject):
-    finished = pyqtSignal(bytes, float)  # data, estimated size
+    finished = pyqtSignal(bytes, float)
     started = pyqtSignal()
+    error = pyqtSignal(str)
 
     def __init__(self, image_path, quality, method, lossless):
         super().__init__()
         self.image_path = image_path
         self.quality = quality
-        self.method = method
+        self.method = method  # Not used with Pillow, can be removed or repurposed
         self.lossless = lossless
 
     def run(self):
         self.started.emit()
-        img = cv2.imread(self.image_path)
-        encode_params = [
-            int(cv2.IMWRITE_WEBP_QUALITY), self.quality
-        ]
-        success, buffer = cv2.imencode('.webp', img, encode_params)
-        if success:
-            data = buffer.tobytes()
-            estimated_size = len(data) / 1024
-            self.finished.emit(data, estimated_size)
+        try:
+            # Read image using Pillow
+            img = Image.open(self.image_path).convert("RGBA")
+
+            # Prepare WebP parameters
+            webp_params = {
+                'format': 'WEBP',
+                'quality': self.quality,
+            }
+            if self.lossless:
+                webp_params['lossless'] = True
+
+            # Convert to bytes using Pillow
+            buffer = io.BytesIO()
+            img.save(buffer, **webp_params)
+
+            webp_data = buffer.getvalue()
+            estimated_size = len(webp_data) / 1024  # in KB
+            self.finished.emit(webp_data, estimated_size)
+
+        except Exception as e:
+            self.error.emit(f"Error converting image: {str(e)}")
 
 
 class ImageConverter(QWidget):
@@ -321,7 +325,8 @@ class ImageConverter(QWidget):
 
     def load_image(self, file_path=None):
         if file_path is None:
-            file_path, _ = QFileDialog.getOpenFileName(self, "Open Image", "", "Images (*.png *.jpg *.jpeg *.bmp *.webp)")
+            file_path, _ = QFileDialog.getOpenFileName(self, "Open Image", "",
+                                                       "Images (*.png *.jpg *.jpeg *.bmp *.webp)")
 
         if file_path:
             self.image_path = file_path
@@ -335,17 +340,25 @@ class ImageConverter(QWidget):
         if self.image_path:
             save_path, _ = QFileDialog.getSaveFileName(self, 'Save Image', file_name, 'WEBP Files (*.webp)')
             if save_path:
-                img = Image.open(self.image_path)
+                try:
+                    img = Image.open(self.image_path).convert("RGBA")
 
-                quality = self.quality_slider.value()
-                method = int(self.method_combo.currentText())
-                lossless = self.lossless_checkbox.isChecked()
+                    # Get settings
+                    quality = self.quality_slider.value()
+                    lossless = self.lossless_checkbox.isChecked()
 
-                img.save(save_path, "WEBP",
-                         quality=quality,
-                         lossless=lossless,
-                         method=method,
-                         icc_profile=None)
+                    # Prepare parameters for saving
+                    save_params = {'format': 'WEBP'}
+                    if lossless:
+                        save_params['lossless'] = True
+                    else:
+                        save_params['quality'] = quality
+
+                    # Save image using Pillow
+                    img.save(save_path, **save_params)
+
+                except Exception as e:
+                    print(f"Error saving image: {e}")  # Replace with proper error dialog in UI
 
     def convert_image(self):
         if not self.image_path:
